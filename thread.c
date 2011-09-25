@@ -2497,15 +2497,17 @@ do_select(int n, rb_fdset_t *read, rb_fdset_t *write, rb_fdset_t *except,
     rb_fdset_t UNINITIALIZED_VAR(orig_read);
     rb_fdset_t UNINITIALIZED_VAR(orig_write);
     rb_fdset_t UNINITIALIZED_VAR(orig_except);
-    double limit = 0;
-    struct timeval wait_rest;
+    struct timeval limit;
+    struct timeval tv;
     rb_thread_t *th = GET_THREAD();
 
     if (timeout) {
-	limit = timeofday();
-	limit += (double)timeout->tv_sec+(double)timeout->tv_usec*1e-6;
-	wait_rest = *timeout;
-	timeout = &wait_rest;
+	getclockofday(&limit);
+	ruby_timeval_add(&limit, timeout);
+
+	/* preserve timeout argument */
+	tv = *timeout;
+	timeout = &tv;
     }
 
     if (read)
@@ -2530,21 +2532,19 @@ do_select(int n, rb_fdset_t *read, rb_fdset_t *write, rb_fdset_t *except,
 #ifdef ERESTART
 	  case ERESTART:
 #endif
+	    if (timeout) {
+		if (update_tv_timeout(&limit, timeout) == FALSE) {
+		    result = errno = 0;
+		    break;
+		}
+	    }
+
 	    if (read)
 		rb_fd_dup(read, &orig_read);
 	    if (write)
 		rb_fd_dup(write, &orig_write);
 	    if (except)
 		rb_fd_dup(except, &orig_except);
-
-	    if (timeout) {
-		double d = limit - timeofday();
-
-		wait_rest.tv_sec = (unsigned int)d;
-		wait_rest.tv_usec = (int)((d-(double)wait_rest.tv_sec)*1e6);
-		if (wait_rest.tv_sec < 0)  wait_rest.tv_sec = 0;
-		if (wait_rest.tv_usec < 0) wait_rest.tv_usec = 0;
-	    }
 
 	    goto retry;
 	  default:

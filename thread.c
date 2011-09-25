@@ -877,34 +877,32 @@ getclockofday(struct timeval *tp)
     }
 }
 
-static void
-sleep_timeval(rb_thread_t *th, struct timeval tv)
+static int
+update_tv_timeout(struct timeval *limit, struct timeval *ret)
 {
-    struct timeval to, tvn;
+    struct timeval now;
+
+    getclockofday(&now);
+    if (ruby_timeval_cmp(limit, &now) < 0)
+	return FALSE;
+    ruby_timeval_sub(ret, limit, &now);
+    return TRUE;
+}
+
+static void
+sleep_timeval(rb_thread_t *th, struct timeval timeout)
+{
+    struct timeval to;
     enum rb_thread_status prev_status = th->status;
 
     getclockofday(&to);
-    to.tv_sec += tv.tv_sec;
-    if ((to.tv_usec += tv.tv_usec) >= 1000000) {
-	to.tv_sec++;
-	to.tv_usec -= 1000000;
-    }
-
+    ruby_timeval_add(&to, &timeout);
     th->status = THREAD_STOPPED;
     do {
-	native_sleep(th, &tv);
+	native_sleep(th, &timeout);
 	RUBY_VM_CHECK_INTS();
-	getclockofday(&tvn);
-	if (to.tv_sec < tvn.tv_sec) break;
-	if (to.tv_sec == tvn.tv_sec && to.tv_usec <= tvn.tv_usec) break;
-	thread_debug("sleep_timeval: %ld.%.6ld > %ld.%.6ld\n",
-		     (long)to.tv_sec, (long)to.tv_usec,
-		     (long)tvn.tv_sec, (long)tvn.tv_usec);
-	tv.tv_sec = to.tv_sec - tvn.tv_sec;
-	if ((tv.tv_usec = to.tv_usec - tvn.tv_usec) < 0) {
-	    --tv.tv_sec;
-	    tv.tv_usec += 1000000;
-	}
+	if (update_tv_timeout(&to, &timeout) == FALSE)
+	    break;
     } while (th->status == THREAD_STOPPED);
     th->status = prev_status;
 }

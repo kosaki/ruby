@@ -174,6 +174,11 @@ VALUE rb_struct_init_copy(VALUE copy, VALUE s);
 /* time.c */
 struct timeval rb_time_timeval(VALUE);
 
+void ruby_timeval_add(struct timeval *a, struct timeval *b);
+int ruby_timeval_sub(struct timeval *a, const struct timeval *b,
+		      const struct timeval *c);
+int ruby_timeval_cmp(struct timeval *a, struct timeval *b);
+
 /* thread.c */
 VALUE rb_obj_is_mutex(VALUE obj);
 VALUE ruby_suppress_tracing(VALUE (*func)(VALUE, int), VALUE arg, int always);

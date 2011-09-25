@@ -37,6 +37,68 @@ static ID id_eq, id_ne, id_quo, id_div, id_cmp, id_lshift;
 #define DIV(n,d) ((n)<0 ? NDIV((n),(d)) : (n)/(d))
 #define MOD(n,d) ((n)<0 ? NMOD((n),(d)) : (n)%(d))
 
+/*
+ * a += b
+ */
+void
+ruby_timeval_add(struct timeval *a, struct timeval *b)
+{
+    a->tv_sec += b->tv_sec;
+    a->tv_usec += b->tv_usec;
+    if (a->tv_usec >= 1000*1000) {
+	a->tv_sec++;
+	a->tv_usec -= 1000*1000;
+    }
+}
+
+/*
+ * a = b - c
+ *
+ * return 0 if b <= c.
+ */
+int
+ruby_timeval_sub(struct timeval *a, const struct timeval *b,
+		  const struct timeval *c)
+{
+    if (b->tv_sec < c->tv_sec) {
+       return 0;
+    }
+
+    *a = *b;
+    while (a->tv_usec < c->tv_usec) {
+       if (a->tv_sec <= c->tv_sec) {
+	   return 0;
+       }
+       a->tv_sec -= 1;
+       a->tv_usec += 1000 * 1000;
+    }
+    a->tv_sec  -= c->tv_sec;
+    a->tv_usec -= c->tv_usec;
+
+    return a->tv_sec != 0 || a->tv_usec != 0;
+}
+
+/*
+ * return <0 if a is smaller than b.
+ * return 0 if a is equal to b.
+ * return >0 if otherwise.
+ */
+int
+ruby_timeval_cmp(struct timeval *a, struct timeval *b)
+{
+    if (a->tv_sec < b->tv_sec)
+	return -1;
+    else if (a->tv_sec > b->tv_sec)
+	return 1;
+
+    if (a->tv_usec < b->tv_usec)
+	return -1;
+    if (a->tv_usec > b->tv_usec)
+	return 1;
+
+    return 0;
+}
+
 static int
 eq(VALUE x, VALUE y)
 {

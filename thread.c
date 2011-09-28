@@ -127,10 +127,14 @@ static inline void blocking_region_end(rb_thread_t *th, struct rb_blocking_regio
 #define BLOCKING_REGION(exec, ubf, ubfarg) do { \
     rb_thread_t *__th = GET_THREAD(); \
     struct rb_blocking_region_buffer __region; \
+    int saved_errno; \
     blocking_region_begin(__th, &__region, (ubf), (ubfarg)); \
+    errno = 0; \
     exec; \
+    saved_errno = errno; \
     blocking_region_end(__th, &__region); \
     RUBY_VM_CHECK_INTS(); \
+    errno = saved_errno; \
 } while(0)
 
 #if THREAD_DEBUG
@@ -1116,7 +1120,6 @@ rb_thread_blocking_region(
 {
     VALUE val;
     rb_thread_t *th = GET_THREAD();
-    int saved_errno = 0;
 
     th->waiting_fd = -1;
     if (ubf == RUBY_UBF_IO || ubf == RUBY_UBF_PROCESS) {
@@ -1126,9 +1129,7 @@ rb_thread_blocking_region(
 
     BLOCKING_REGION({
 	val = func(data1);
-	saved_errno = errno;
     }, ubf, data2);
-    errno = saved_errno;
 
     return val;
 }
@@ -1138,15 +1139,12 @@ rb_thread_io_blocking_region(rb_blocking_function_t *func, void *data1, int fd)
 {
     VALUE val;
     rb_thread_t *th = GET_THREAD();
-    int saved_errno = 0;
 
     th->waiting_fd = fd;
     BLOCKING_REGION({
 	val = func(data1);
-	saved_errno = errno;
     }, ubf_select, th);
     th->waiting_fd = -1;
-    errno = saved_errno;
 
     return val;
 }
@@ -2493,7 +2491,7 @@ static int
 do_select(int n, rb_fdset_t *read, rb_fdset_t *write, rb_fdset_t *except,
 	  struct timeval *timeout)
 {
-    int result, lerrno;
+    int result;
     rb_fdset_t UNINITIALIZED_VAR(orig_read);
     rb_fdset_t UNINITIALIZED_VAR(orig_write);
     rb_fdset_t UNINITIALIZED_VAR(orig_except);
@@ -2518,13 +2516,9 @@ do_select(int n, rb_fdset_t *read, rb_fdset_t *write, rb_fdset_t *except,
 	rb_fd_init_copy(&orig_except, except);
 
   retry:
-    lerrno = 0;
-
     BLOCKING_REGION({
 	    result = native_fd_select(n, read, write, except, timeout, th);
-	    if (result < 0) lerrno = errno;
 	}, ubf_select, th);
-    errno = lerrno;
 
     if (result < 0) {
 	switch (errno) {
@@ -2714,7 +2708,7 @@ int
 rb_wait_for_single_fd(int fd, int events, struct timeval *tv)
 {
     struct pollfd fds;
-    int result, lerrno;
+    int result;
     double limit = 0;
     struct timespec ts;
     struct timespec *timeout = NULL;
@@ -2731,14 +2725,11 @@ rb_wait_for_single_fd(int fd, int events, struct timeval *tv)
     fds.events = (short)events;
 
 retry:
-    lerrno = 0;
     BLOCKING_REGION({
 	result = ppoll(&fds, 1, timeout, NULL);
-	if (result < 0) lerrno = errno;
     }, ubf_select, GET_THREAD());
 
     if (result < 0) {
-	errno = lerrno;
 	switch (errno) {
 	  case EINTR:
 #ifdef ERESTART

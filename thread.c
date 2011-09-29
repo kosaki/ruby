@@ -62,8 +62,7 @@
 VALUE rb_cMutex;
 VALUE rb_cBarrier;
 
-static void sleep_timeval(rb_thread_t *th, struct timeval time);
-static void sleep_wait_for_interrupt(rb_thread_t *th, double sleepsec);
+static void sleep_timeval(rb_thread_t *th, struct timeval *timeout);
 static void sleep_forever(rb_thread_t *th, int nodeadlock);
 static double timeofday(void);
 static int rb_threadptr_dead(rb_thread_t *th);
@@ -649,13 +648,37 @@ rb_thread_create(VALUE (*fn)(ANYARGS), void *arg)
     return thread_create_core(rb_thread_alloc(rb_cThread), (VALUE)arg, fn);
 }
 
+static void
+getclockofday(struct timeval *tp)
+{
+#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
+    struct timespec ts;
 
-/* +infty, for this purpose */
-#define DELAY_INFTY 1E30
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
+	tp->tv_sec = ts.tv_sec;
+	tp->tv_usec = ts.tv_nsec / 1000;
+    } else
+#endif
+    {
+        gettimeofday(tp, NULL);
+    }
+}
+
+static int
+update_tv_timeout(struct timeval *limit, struct timeval *ret)
+{
+    struct timeval now;
+
+    getclockofday(&now);
+    if (ruby_timeval_cmp(limit, &now) < 0)
+	return FALSE;
+    ruby_timeval_sub(ret, limit, &now);
+    return TRUE;
+}
 
 struct join_arg {
     rb_thread_t *target, *waiting;
-    double limit;
+    struct timeval limit;
     int forever;
 };
 
@@ -685,20 +708,20 @@ thread_join_sleep(VALUE arg)
 {
     struct join_arg *p = (struct join_arg *)arg;
     rb_thread_t *target_th = p->target, *th = p->waiting;
-    double now, limit = p->limit;
+    struct timeval *limit = &p->limit;
+    struct timeval timeout;
 
     while (target_th->status != THREAD_KILLED) {
 	if (p->forever) {
 	    sleep_forever(th, 1);
 	}
 	else {
-	    now = timeofday();
-	    if (now > limit) {
+	    if (update_tv_timeout(limit, &timeout) == FALSE) {
 		thread_debug("thread_join: timeout (thid: %p)\n",
 			     (void *)target_th->thread_id);
 		return Qfalse;
 	    }
-	    sleep_wait_for_interrupt(th, limit - now);
+	    sleep_timeval(th, &timeout);
 	}
 	thread_debug("thread_join: interrupted (thid: %p)\n",
 		     (void *)target_th->thread_id);
@@ -707,15 +730,22 @@ thread_join_sleep(VALUE arg)
 }
 
 static VALUE
-thread_join(rb_thread_t *target_th, double delay)
+thread_join(rb_thread_t *target_th, struct timeval *timeout)
 {
     rb_thread_t *th = GET_THREAD();
     struct join_arg arg;
 
     arg.target = target_th;
     arg.waiting = th;
-    arg.limit = timeofday() + delay;
-    arg.forever = delay == DELAY_INFTY;
+    if (timeout == NULL) {
+	arg.forever = TRUE;
+	memset(&arg.limit, 0, sizeof(arg.limit));
+    }
+    else {
+	arg.forever = FALSE;
+	getclockofday(&arg.limit);
+	ruby_timeval_add(&arg.limit, timeout);
+    }
 
     thread_debug("thread_join (thid: %p)\n", (void *)target_th->thread_id);
 
@@ -793,17 +823,18 @@ static VALUE
 thread_join_m(int argc, VALUE *argv, VALUE self)
 {
     rb_thread_t *target_th;
-    double delay = DELAY_INFTY;
-    VALUE limit;
+    struct timeval timeout;
+    VALUE timeoutval;
 
     GetThreadPtr(self, target_th);
 
-    rb_scan_args(argc, argv, "01", &limit);
-    if (!NIL_P(limit)) {
-	delay = rb_num2dbl(limit);
+    rb_scan_args(argc, argv, "01", &timeoutval);
+    if (NIL_P(timeoutval)) {
+	return thread_join(target_th, NULL);
     }
 
-    return thread_join(target_th, delay);
+    timeout = rb_time_timeval(timeoutval);
+    return thread_join(target_th, &timeout);
 }
 
 /*
@@ -822,27 +853,13 @@ thread_value(VALUE self)
 {
     rb_thread_t *th;
     GetThreadPtr(self, th);
-    thread_join(th, DELAY_INFTY);
+    thread_join(th, NULL);
     return th->value;
 }
 
 /*
  * Thread Scheduling
  */
-
-static struct timeval
-double2timeval(double d)
-{
-    struct timeval time;
-
-    time.tv_sec = (int)d;
-    time.tv_usec = (int)((d - (int)d) * 1e6);
-    if (time.tv_usec < 0) {
-	time.tv_usec += (int)1e6;
-	time.tv_sec -= 1;
-    }
-    return time;
-}
 
 static void
 sleep_forever(rb_thread_t *th, int deadlockable)
@@ -866,46 +883,18 @@ sleep_forever(rb_thread_t *th, int deadlockable)
 }
 
 static void
-getclockofday(struct timeval *tp)
-{
-#if defined(HAVE_CLOCK_GETTIME) && defined(CLOCK_MONOTONIC)
-    struct timespec ts;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) == 0) {
-	tp->tv_sec = ts.tv_sec;
-	tp->tv_usec = ts.tv_nsec / 1000;
-    } else
-#endif
-    {
-        gettimeofday(tp, NULL);
-    }
-}
-
-static int
-update_tv_timeout(struct timeval *limit, struct timeval *ret)
-{
-    struct timeval now;
-
-    getclockofday(&now);
-    if (ruby_timeval_cmp(limit, &now) < 0)
-	return FALSE;
-    ruby_timeval_sub(ret, limit, &now);
-    return TRUE;
-}
-
-static void
-sleep_timeval(rb_thread_t *th, struct timeval timeout)
+sleep_timeval(rb_thread_t *th, struct timeval *timeout)
 {
     struct timeval to;
     enum rb_thread_status prev_status = th->status;
 
     getclockofday(&to);
-    ruby_timeval_add(&to, &timeout);
+    ruby_timeval_add(&to, timeout);
     th->status = THREAD_STOPPED;
     do {
-	native_sleep(th, &timeout);
+	native_sleep(th, timeout);
 	RUBY_VM_CHECK_INTS();
-	if (update_tv_timeout(&to, &timeout) == FALSE)
+	if (update_tv_timeout(&to, timeout) == FALSE)
 	    break;
     } while (th->status == THREAD_STOPPED);
     th->status = prev_status;
@@ -943,25 +932,19 @@ timeofday(void)
 }
 
 static void
-sleep_wait_for_interrupt(rb_thread_t *th, double sleepsec)
-{
-    sleep_timeval(th, double2timeval(sleepsec));
-}
-
-static void
 sleep_for_polling(rb_thread_t *th)
 {
     struct timeval time;
     time.tv_sec = 0;
     time.tv_usec = 100 * 1000;	/* 0.1 sec */
-    sleep_timeval(th, time);
+    sleep_timeval(th, &time);
 }
 
 void
 rb_thread_wait_for(struct timeval time)
 {
     rb_thread_t *th = GET_THREAD();
-    sleep_timeval(th, time);
+    sleep_timeval(th, &time);
 }
 
 void

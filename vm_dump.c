@@ -8,7 +8,6 @@
 
 **********************************************************************/
 
-
 #include "ruby/ruby.h"
 #include "addr2line.h"
 #include "vm_core.h"
@@ -738,6 +737,129 @@ dump_thread(void *arg)
 }
 #endif
 
+#if defined(_WIN32)
+static void
+write_c_backtrace(void)
+{
+    DWORD tid = GetCurrentThreadId();
+    HANDLE th = (HANDLE)_beginthread(dump_thread, 0, &tid);
+    if (th != (HANDLE)-1)
+	WaitForSingleObject(th, INFINITE);
+
+    fprintf(stderr, "\n");
+}
+#elif defined __APPLE__
+static void
+write_c_backtrace(void)
+{
+    fprintf(stderr, "\n");
+    fprintf(stderr, "   See Crash Report log file under "
+	    "~/Library/Logs/CrashReporter or\n");
+    fprintf(stderr, "   /Library/Logs/CrashReporter, for "
+	    "the more detail of.\n");
+}
+#elif HAVE_BACKTRACE
+#define MAX_NATIVE_TRACE 1024
+static void
+write_c_backtrace(void)
+{
+    static void *trace[MAX_NATIVE_TRACE];
+    int n = backtrace(trace, MAX_NATIVE_TRACE);
+    char **syms = backtrace_symbols(trace, n);
+
+    if (syms) {
+#ifdef USE_ELF
+	rb_dump_backtrace_with_lines(n, trace, syms);
+#else
+	int i;
+	for (i=0; i<n; i++) {
+	    fprintf(stderr, "%s\n", syms[i]);
+	}
+#endif
+	free(syms);
+    }
+
+    fprintf(stderr, "\n");
+}
+#endif /* HAVE_BACKTRACE */
+
+#ifdef __linux__
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/types.h>
+#include <unistd.h>
+
+#define ABRT_SOCK "/var/run/abrt/abrt.socket"
+int use_abrt = 0;
+
+static void
+abrt_setup(void)
+{
+    int fd;
+    FILE *fp;
+    struct sockaddr_un addr;
+
+    if ((fd = socket(PF_UNIX, SOCK_STREAM, 0)) < 0)
+	return;
+
+    bzero((char *)&addr, sizeof(addr));
+    addr.sun_family = AF_UNIX;
+    strcpy(addr.sun_path, ABRT_SOCK);
+
+    if (connect(fd, (struct sockaddr *)&addr,
+		sizeof(addr.sun_family) + strlen(ABRT_SOCK)) < 0)
+	goto close_out;
+
+    fp = fdopen(fd, "r+");
+    if (!fp)
+	goto close_out;
+
+    use_abrt = 1;
+    setbuf(fp, NULL);
+
+    fprintf(stderr, "   See Abrt Report log file under "
+	    "/var/spool/abrt/ for the more detail of.\n\n");
+    dup2(fd, 2);
+
+    fprintf(stderr, "PUT / HTTP/1.1\r\n\r\n");
+    fprintf(stderr, "PID=%d%c", getpid(), '\0');
+    fprintf(stderr, "EXECUTABLE=/usr/bin/ruby%c", '\0');
+    fprintf(stderr, "ANALYZER=Python%c", '\0');
+    fprintf(stderr, "BASENAME=rbhook%c", '\0');
+    fprintf(stderr, "REASON=ruby crash%c", '\0');
+
+    fprintf(stderr, "BACKTRACE=");
+    return;
+
+  close_out:
+    close(fd);
+    return;
+}
+#endif
+
+#ifdef __linux__
+# define PROC_MAPS_NAME "/proc/self/maps"
+static void
+write_proc_maps_informations(void)
+{
+    FILE *fp = fopen(PROC_MAPS_NAME, "r");
+    if (fp) {
+	fprintf(stderr, "* Process memory map:\n\n");
+
+	while (!feof(fp)) {
+	    char buff[0x100];
+	    size_t rn = fread(buff, 1, 0x100, fp);
+	    if (fwrite(buff, 1, rn, stderr) != rn)
+		break;
+	}
+
+	fclose(fp);
+	fprintf(stderr, "\n\n");
+    }
+}
+#endif /* __linux__ */
+
 void
 rb_vm_bugreport(void)
 {
@@ -750,6 +872,11 @@ rb_vm_bugreport(void)
     enum {other_runtime_info = 0};
 #endif
     const rb_vm_t *const vm = GET_VM();
+
+#ifdef __linux__
+    abrt_setup();
+#endif
+
     if (vm) {
 	SDR();
 	rb_backtrace_print_as_bugreport();
@@ -759,40 +886,7 @@ rb_vm_bugreport(void)
 #if HAVE_BACKTRACE || defined(_WIN32)
     fprintf(stderr, "-- C level backtrace information "
 	    "-------------------------------------------\n");
-
-    {
-#if defined __APPLE__
-	fprintf(stderr, "\n");
-	fprintf(stderr, "   See Crash Report log file under "
-		"~/Library/Logs/CrashReporter or\n");
-	fprintf(stderr, "   /Library/Logs/CrashReporter, for "
-		"the more detail of.\n");
-#elif HAVE_BACKTRACE
-#define MAX_NATIVE_TRACE 1024
-	static void *trace[MAX_NATIVE_TRACE];
-	int n = backtrace(trace, MAX_NATIVE_TRACE);
-	char **syms = backtrace_symbols(trace, n);
-
-	if (syms) {
-#ifdef USE_ELF
-	    rb_dump_backtrace_with_lines(n, trace, syms);
-#else
-	    int i;
-	    for (i=0; i<n; i++) {
-		fprintf(stderr, "%s\n", syms[i]);
-	    }
-#endif
-	    free(syms);
-	}
-#elif defined(_WIN32)
-	DWORD tid = GetCurrentThreadId();
-	HANDLE th = (HANDLE)_beginthread(dump_thread, 0, &tid);
-	if (th != (HANDLE)-1)
-	    WaitForSingleObject(th, INFINITE);
-#endif
-    }
-
-    fprintf(stderr, "\n");
+    write_c_backtrace();
 #endif /* HAVE_BACKTRACE */
 
     if (other_runtime_info || vm) {
@@ -814,24 +908,9 @@ rb_vm_bugreport(void)
 	fprintf(stderr, "\n");
     }
 
-    {
-#ifdef PROC_MAPS_NAME
-	{
-	    FILE *fp = fopen(PROC_MAPS_NAME, "r");
-	    if (fp) {
-		fprintf(stderr, "* Process memory map:\n\n");
-
-		while (!feof(fp)) {
-		    char buff[0x100];
-		    size_t rn = fread(buff, 1, 0x100, fp);
-		    if (fwrite(buff, 1, rn, stderr) != rn)
-			break;
-		}
-
-		fclose(fp);
-		fprintf(stderr, "\n\n");
-	    }
-	}
-#endif /* __linux__ */
-    }
+#ifdef __linux__
+    write_proc_maps_informations();
+    if (use_abrt)
+	fprintf(stderr, "%c", '\0');
+#endif
 }

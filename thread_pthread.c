@@ -30,6 +30,9 @@
 #if defined(__native_client__) && defined(NACL_NEWLIB)
 # include "nacl/select.h"
 #endif
+#ifdef HAVE_SYS_SYSCALL_H
+#include <sys/syscall.h>
+#endif
 
 static void native_mutex_lock(pthread_mutex_t *lock);
 static void native_mutex_unlock(pthread_mutex_t *lock);

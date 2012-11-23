@@ -49,6 +49,9 @@
 #include "internal.h"
 #include "ruby/io.h"
 #include "ruby/thread.h"
+#ifdef HAVE_SYS_PRCTL_H
+#include <sys/prctl.h>
+#endif
 
 #ifndef USE_NATIVE_THREAD_PRIORITY
 #define USE_NATIVE_THREAD_PRIORITY 0
@@ -577,6 +580,12 @@ thread_create_core(VALUE thval, VALUE args, VALUE (*fn)(ANYARGS))
 	th->status = THREAD_KILLED;
 	rb_raise(rb_eThreadError, "can't create Thread (%d)", err);
     }
+    {
+	char buf[128];
+	sprintf(buf, "<th:0x%llx>", (unsigned long long)th->thread_id);
+	th->name = rb_str_new_cstr(buf);
+    }
+
     return thval;
 }
 
@@ -2880,6 +2889,54 @@ rb_thread_priority_set(VALUE thread, VALUE prio)
     return INT2NUM(th->priority);
 }
 
+/*
+ *  call-seq:
+ *     thr.name   -> string
+ *
+ *  Returns the name of <i>thr</i>. The name may be useful for debug printing.
+ *
+ *     Thread.current.name   #=> "main-thread"
+ */
+static VALUE
+rb_thread_name(VALUE self)
+{
+    rb_thread_t *th;
+    GetThreadPtr(self, th);
+
+    return th->name;
+}
+
+/*
+ *  call-seq:
+ *     thr.name= string   -> thr
+ *
+ *  Sets the name of <i>thr</i> to <i>string</i>. The name might also
+ *  affects platform utilities (e.g. top, ps).
+ *
+ *    Thread.new {
+ *      p Thread.current.name                #=> "<th:0x7f9dc20fd700>"
+ *      Thread.current.name = "my-thread1"
+ *      p Thread.current.name                #=> "my-thread1"
+ *    }.join
+ */
+static VALUE
+rb_thread_name_set(VALUE self, VALUE val)
+{
+    rb_thread_t *th;
+    GetThreadPtr(self, th);
+
+    th->name = StringValue(val);
+
+#if defined(__linux__) && defined(PR_SET_NAME)
+    {
+	char* name = StringValueCStr(val);
+	prctl(PR_SET_NAME, name);
+    }
+#endif
+
+    return self;
+}
+
 /* for IO */
 
 #if defined(NFDBITS) && defined(HAVE_RB_FD_INIT)
@@ -4732,6 +4789,8 @@ Init_Thread(void)
     rb_define_method(rb_cThread, "backtrace_locations", rb_thread_backtrace_locations_m, -1);
 
     rb_define_method(rb_cThread, "inspect", rb_thread_inspect, 0);
+    rb_define_method(rb_cThread, "name", rb_thread_name, 0);
+    rb_define_method(rb_cThread, "name=", rb_thread_name_set, 1);
 
     closed_stream_error = rb_exc_new2(rb_eIOError, "stream closed");
     OBJ_TAINT(closed_stream_error);
@@ -4774,6 +4833,8 @@ Init_Thread(void)
 	    th->async_errinfo_queue = rb_ary_tmp_new(0);
 	    th->async_errinfo_queue_checked = 0;
 	    th->async_errinfo_mask_stack = rb_ary_tmp_new(0);
+
+	    th->name = rb_str_new_cstr("main-thread");
 	}
     }
 

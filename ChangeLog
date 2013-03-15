@@ -1,3 +1,7 @@
+Fri Mar 15 14:45:02 2013  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* configure.in (_FORTIFY_SOURCE): added a few comments.
+
 Wed Mar 13 15:16:35 2013  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* include/ruby/missing.h (__syscall): moved to...

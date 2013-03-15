@@ -1,3 +1,9 @@
+Fri Mar 15 14:57:16 2013  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* thread.c: disabled _FORTIFY_SOURCE for avoid to hit glibc bug.
+	* test/ruby/test_io.rb (TestIO#test_io_select_with_many_files):
+	  test for the above.
+
 Fri Mar 15 14:45:02 2013  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* configure.in (_FORTIFY_SOURCE): added a few comments.

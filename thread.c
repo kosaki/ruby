@@ -42,6 +42,15 @@
  */
 
 
+/*
+ * glibc 2.15 or later enable additional argument check against FD_SET, FD_CLR
+ * and FD_ISSET when _FORTIFY_SOURCE > 0.
+ * However, the implementation is wrong. It assume fd is always less than
+ * FD_SETSIZE (i.e. 1024). And then when enabling HAVE_RB_FD_INIT, it doesn't
+ * work correctly. Then we disable it until glibc fixes it.
+ */
+#undef _FORTIFY_SOURCE
+
 /* for model 2 */
 
 #include "eval_intern.h"

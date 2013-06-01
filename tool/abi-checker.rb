@@ -46,3 +46,5 @@ template_file.write(xml_template)
 template_file.flush
 
 `abi-compliance-checker -lib libruby -old #{template_file.path} -relpath1 #{ARGV[0]} -new #{template_file.path} -relpath2 #{ARGV[1]} -skip-headers #{sh_file.path} -skip-symbols #{ss_file.path} `
+
+puts "reports generated. see compat_reports directory."

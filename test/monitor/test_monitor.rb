@@ -38,7 +38,6 @@ class TestMonitor < Test::Unit::TestCase
     th = Thread.start {
       @monitor.enter
       Thread.current.kill
-      @monitor.exit
     }
     th.join
     @monitor.enter

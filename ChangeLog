@@ -1,3 +1,9 @@
+Tue Dec 15 16:09:04 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* test/monitor/test_monitor.rb
+	(TestMonitor#test_enter_second_after_killed_thread): remove
+	  never reached statement for clarification.
+
 Fri Dec 18 10:24:44 2015  SHIBATA Hiroshi  <hsbt@ruby-lang.org>
 
 	* lib/irb/ruby-lex.rb: fixed parse error for striped heredocument syntax.

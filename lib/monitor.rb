@@ -166,15 +166,17 @@ module MonitorMixin
   # Attempts to enter exclusive section.  Returns +false+ if lock fails.
   #
   def mon_try_enter
-    if @mon_owner != Thread.current
-      unless @mon_mutex.try_lock
+    if @mon_mutex.owned?
+      @mon_count += 1
+      return true
+    else
+      if @mon_mutex.try_lock
+        @mon_count = 1
+        return true
+      else
         return false
       end
-      @mon_owner = Thread.current
-      @mon_count = 0
     end
-    @mon_count += 1
-    return true
   end
   # For backward compatibility
   alias try_mon_enter mon_try_enter
@@ -183,12 +185,13 @@ module MonitorMixin
   # Enters exclusive section.
   #
   def mon_enter
-    if @mon_owner != Thread.current
-      @mon_mutex.lock
-      @mon_owner = Thread.current
-      @mon_count = 0
+    if @mon_mutex.owned?
+      @mon_count += 1
+    else
+      if @mon_mutex.lock
+        @mon_count = 1
+      end
     end
-    @mon_count += 1
   end
 
   #
@@ -198,7 +201,6 @@ module MonitorMixin
     mon_check_owner
     @mon_count -=1
     if @mon_count == 0
-      @mon_owner = nil
       @mon_mutex.unlock
     end
   end
@@ -239,25 +241,22 @@ module MonitorMixin
   # Initializes the MonitorMixin after being included in a class or when an
   # object has been extended with the MonitorMixin
   def mon_initialize
-    @mon_owner = nil
     @mon_count = 0
     @mon_mutex = Mutex.new
   end
 
   def mon_check_owner
-    if @mon_owner != Thread.current
+    unless @mon_mutex.owned?
       raise ThreadError, "current thread not owner"
     end
   end
 
   def mon_enter_for_cond(count)
-    @mon_owner = Thread.current
     @mon_count = count
   end
 
   def mon_exit_for_cond
     count = @mon_count
-    @mon_owner = nil
     @mon_count = 0
     return count
   end
@@ -290,10 +289,6 @@ end
 #    making them private, or marking them :nodoc:, etc.
 #  - RDoc doesn't recognise aliases, so we have mon_synchronize documented, but
 #    not synchronize.
-#  - mon_owner is in Nutshell, but appears as an accessor in a separate module
-#    here, so is hard/impossible to RDoc.  Some other useful accessors
-#    (mon_count and some queue stuff) are also in this module, and don't appear
-#    directly in the RDoc output.
 #  - in short, it may be worth changing the code layout in this file to make the
 #    documentation easier
 

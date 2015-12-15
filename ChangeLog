@@ -1,3 +1,8 @@
+Tue Dec 15 16:39:04 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* lib/monitor.rb (MonitorMixin::ConditionVariable#wait): use
+	Thread.handle_interrupt for avoiding races.
+
 Tue Dec 15 16:24:39 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* lib/monitor.rb: remove @mon_owner. Mutex.owned? is a better way.

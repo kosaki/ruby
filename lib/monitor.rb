@@ -105,13 +105,15 @@ module MonitorMixin
     # even if no other thread doesn't signal.
     #
     def wait(timeout = nil)
-      @monitor.__send__(:mon_check_owner)
-      count = @monitor.__send__(:mon_exit_for_cond)
-      begin
-        @cond.wait(@monitor.instance_variable_get(:@mon_mutex), timeout)
-        return true
-      ensure
-        @monitor.__send__(:mon_enter_for_cond, count)
+      Thread.handle_interrupt(Exception => :on_blocking) do
+        @monitor.__send__(:mon_check_owner)
+        count = @monitor.__send__(:mon_exit_for_cond)
+        begin
+          @cond.wait(@monitor.instance_variable_get(:@mon_mutex), timeout)
+          return true
+        ensure
+          @monitor.__send__(:mon_enter_for_cond, count)
+        end
       end
     end
 

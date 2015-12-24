@@ -1230,13 +1230,13 @@ Init_thread_sync(void)
     rb_cMutex = rb_define_class_under(rb_cThread, "Mutex", rb_cObject);
     rb_define_alloc_func(rb_cMutex, mutex_alloc);
     rb_define_method(rb_cMutex, "initialize", mutex_initialize, 0);
-    rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
-    rb_define_method(rb_cMutex, "try_lock", rb_mutex_trylock, 0);
     rb_define_method(rb_cMutex, "lock", rb_mutex_lock, 0);
-    rb_define_method(rb_cMutex, "unlock", rb_mutex_unlock, 0);
+    rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
+    rb_define_method(rb_cMutex, "owned?", rb_mutex_owned_p, 0);
     rb_define_method(rb_cMutex, "sleep", mutex_sleep, -1);
     rb_define_method(rb_cMutex, "synchronize", rb_mutex_synchronize_m, 0);
-    rb_define_method(rb_cMutex, "owned?", rb_mutex_owned_p, 0);
+    rb_define_method(rb_cMutex, "try_lock", rb_mutex_trylock, 0);
+    rb_define_method(rb_cMutex, "unlock", rb_mutex_unlock, 0);
 
     /* Queue */
     rb_cQueue = rb_struct_define_without_accessor_under(

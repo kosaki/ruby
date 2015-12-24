@@ -1,3 +1,8 @@
+Thu Dec 24 17:37:43 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* thread_sync.c (Init_thread_sync): sort Mutex's rb_define_method
+	  into alphabetical order.
+
 Tue Dec 15 16:39:04 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* lib/monitor.rb (MonitorMixin::ConditionVariable#wait): use

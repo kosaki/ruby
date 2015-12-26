@@ -512,6 +512,27 @@ void rb_mutex_allow_trap(VALUE self, int val)
     m->allow_trap = val;
 }
 
+/*
+ * call-seq:
+ *   mutex.inspect   -> string
+ *
+ * Dump the _mutex_ to a string.
+ */
+VALUE mutex_inspect(VALUE self)
+{
+    VALUE v;
+    rb_mutex_t *mutex;
+    VALUE class_str = rb_class_name(CLASS_OF(self));
+
+    GetMutexPtr(self, mutex);
+    v = rb_sprintf("#<%"PRIsVALUE":%p, @locked=%s, @owner=%+"PRIsVALUE">",
+		   class_str,
+		   (void*)self,
+		   rb_mutex_locked_p(self) ? "true": "false",
+		   mutex->th ? mutex->th->self : Qnil);
+    return v;
+}
+
 /* Queue */
 
 enum {
@@ -1230,6 +1251,7 @@ Init_thread_sync(void)
     rb_cMutex = rb_define_class_under(rb_cThread, "Mutex", rb_cObject);
     rb_define_alloc_func(rb_cMutex, mutex_alloc);
     rb_define_method(rb_cMutex, "initialize", mutex_initialize, 0);
+    rb_define_method(rb_cMutex, "inspect", mutex_inspect, 0);
     rb_define_method(rb_cMutex, "lock", rb_mutex_lock, 0);
     rb_define_method(rb_cMutex, "locked?", rb_mutex_locked_p, 0);
     rb_define_method(rb_cMutex, "owned?", rb_mutex_owned_p, 0);

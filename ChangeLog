@@ -1,3 +1,9 @@
+Sat Dec 26 11:14:59 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* thread_sync.c (mutex_inspect): implement nice Mutex::inspect.
+	  example)
+	   #<Thread::Mutex:0x007fd965a7a1e8, @locked=true, @owner=#<Thread:0x007fd9657fe298 run>>
+
 Thu Dec 24 17:37:43 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* thread_sync.c (Init_thread_sync): sort Mutex's rb_define_method

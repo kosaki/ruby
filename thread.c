@@ -2803,7 +2803,7 @@ rb_thread_setname(VALUE thread, VALUE name)
  * call-seq:
  *   thr.inspect   -> string
  *
- * Dump the name, id, and status of _thr_ to a string.
+ * Dump the name, id, defined location and status of _thr_ to a string.
  */
 
 static VALUE
@@ -2818,17 +2818,22 @@ rb_thread_inspect(VALUE thread)
     status = thread_status_name(th);
     str = rb_sprintf("#<%"PRIsVALUE":%p", cname, (void *)thread);
     if (!NIL_P(th->name)) {
-	rb_str_catf(str, "@%"PRIsVALUE, th->name);
+	rb_str_catf(str, ", @name=%"PRIsVALUE, th->name);
     }
     if (!th->first_func && th->first_proc) {
 	VALUE loc = rb_proc_location(th->first_proc);
 	if (!NIL_P(loc)) {
 	    const VALUE *ptr = RARRAY_CONST_PTR(loc);
-	    rb_str_catf(str, "@%"PRIsVALUE":%"PRIsVALUE, ptr[0], ptr[1]);
+	    const VALUE file = ptr[0];
+	    const VALUE line = ptr[1];
+	    VALUE buf = rb_str_buf_new(0);
+
+	    rb_str_catf(buf, "%"PRIsVALUE":%"PRIsVALUE, file, line);
+	    rb_str_catf(str, ", @proc=%"PRIsVALUE, rb_str_inspect(buf));
 	    rb_gc_force_recycle(loc);
 	}
     }
-    rb_str_catf(str, " %s>", status);
+    rb_str_catf(str, ", @status=%s>", status);
     OBJ_INFECT(str, thread);
 
     return str;

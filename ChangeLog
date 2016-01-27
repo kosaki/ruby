@@ -1,3 +1,10 @@
+Thu Jan 28 01:01:20 2016  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* thread.c (rb_thread_inspect): make human readable.
+	  old) #<Thread:0x007f5cef440400@th1@../test test.rb:4 run>
+	  new) #<Thread:0x007fd553be7e10, @name=th1, @proc="../test test.rb:4", @status=run>
+	  Especially old style is toxic when a filename have space.
+
 Sat Dec 26 11:14:59 2015  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* thread_sync.c (mutex_inspect): implement nice Mutex::inspect.

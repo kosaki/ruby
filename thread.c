@@ -2833,7 +2833,11 @@ rb_thread_inspect(VALUE thread)
 	    rb_gc_force_recycle(loc);
 	}
     }
-    rb_str_catf(str, ", @status=%s>", status);
+    rb_str_catf(str, ", @status=%s", status);
+    if (th->locking_mutex != Qfalse) {
+	rb_str_catf(str, ", @wait_for=%"PRIsVALUE, rb_inspect(th->locking_mutex));
+    }
+    rb_str_catf(str, ">");
     OBJ_INFECT(str, thread);
 
     return str;

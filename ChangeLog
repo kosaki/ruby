@@ -1,3 +1,8 @@
+Fri Jan 29 06:40:02 2016  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
+
+	* thread.c (rb_thread_inspect): display @wait_for field if the
+	  target thread is waiting for a mutex.
+
 Thu Jan 28 01:01:20 2016  KOSAKI Motohiro  <kosaki.motohiro@gmail.com>
 
 	* thread.c (rb_thread_inspect): make human readable.
